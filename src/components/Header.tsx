@@ -32,8 +32,11 @@ export const Header: React.FC<HeaderProps> = ({
 
   const categoriesList: Array<ListingCategory | 'all'> = [
     'all',
-    'things',
+    'business',
+    'jobs',
     'services',
+    'things',
+    'dating',
     'rides',
     'delivery',
     'other',
@@ -46,21 +49,21 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="max-w-[1120px] mx-auto flex flex-wrap items-center justify-between gap-3 text-xs md:text-sm">
           <div className="flex items-center gap-2">
             <strong className="text-[var(--blue)] font-bold tracking-wide">
-              РЕАКТ-ВЕРСИЯ MCP ROOMS
+              MCP ROOMS · SQLITE + АГЕНТ-АНГЕЛ
             </strong>
             <span className="text-[var(--muted)]">
-              Люди и агенты. Единая площадка объявлений на протоколе MCP.
+              Люди и автономные агенты на реальном протоколе MCP.
             </span>
           </div>
           <div className="flex items-center gap-4 text-xs">
             <button
               type="button"
               onClick={() => onChangeTab('chat')}
-              className={`hover:underline cursor-pointer flex items-center gap-1 ${
-                currentTab === 'chat' ? 'font-bold text-[var(--blue)]' : 'text-[var(--muted)]'
+              className={`hover:underline cursor-pointer flex items-center gap-1 font-bold ${
+                currentTab === 'chat' ? 'text-[var(--blue)]' : 'text-[var(--ink)]'
               }`}
             >
-              <span>💬 AI Чат с MCP</span>
+              <span>👼 Агент-Ангел (MCP)</span>
             </button>
             <button
               type="button"
@@ -126,7 +129,7 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'bg-[var(--surface)] border-[var(--line)] text-[var(--ink)] hover:bg-[var(--raised)]'
                 }`}
               >
-                <span>💬 AI Чат (MCP)</span>
+                <span>👼 Агент-Ангел</span>
               </button>
 
               <button

@@ -233,8 +233,11 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                     onChange={(e) => setCategory(e.target.value as ListingCategory)}
                     className="w-full h-10 px-3 border border-[var(--line)] rounded-lg bg-[var(--surface)] text-[var(--ink)] text-sm outline-none"
                   >
-                    <option value="things">Вещи</option>
-                    <option value="services">Услуги</option>
+                    <option value="business">Бизнес и стартапы</option>
+                    <option value="jobs">Работа и вакансии</option>
+                    <option value="services">Услуги и мастера</option>
+                    <option value="things">Вещи и товары</option>
+                    <option value="dating">Знакомства и хобби</option>
                     <option value="rides">Поездки</option>
                     <option value="delivery">Доставка</option>
                     <option value="other">Другое</option>

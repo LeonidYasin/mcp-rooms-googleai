@@ -1,8 +1,19 @@
-export type ListingCategory = 'things' | 'services' | 'rides' | 'delivery' | 'other';
+export type ListingCategory =
+  | 'business'
+  | 'jobs'
+  | 'services'
+  | 'things'
+  | 'dating'
+  | 'rides'
+  | 'delivery'
+  | 'other';
 
 export const CATEGORY_LABELS: Record<ListingCategory, string> = {
-  things: 'Вещи',
-  services: 'Услуги',
+  business: 'Бизнес и стартапы',
+  jobs: 'Работа и вакансии',
+  services: 'Услуги и мастера',
+  things: 'Вещи и товары',
+  dating: 'Знакомства и хобби',
   rides: 'Поездки',
   delivery: 'Доставка',
   other: 'Другое',
@@ -91,4 +102,41 @@ export interface McpRoom {
   participants: string[];
   messages: McpMessage[];
   status: 'active' | 'closed';
+  created_at?: number;
+  updated_at?: number;
+}
+
+export interface NegotiationStep {
+  type: 'search' | 'room_created' | 'agent_round' | 'agreement_recorded';
+  title: string;
+  detail: string;
+  status: 'completed' | 'in_progress';
+  timestamp: number;
+}
+
+export interface NegotiationDialogueTurn {
+  sender: string;
+  role: 'agent' | 'human' | 'system';
+  agentName: string;
+  avatar: string;
+  text: string;
+  timestamp: number;
+}
+
+export interface NegotiationResult {
+  negotiationId: string;
+  status: 'agreed' | 'in_progress' | 'listing_created';
+  targetListing: Listing;
+  roomId: string;
+  roomTitle: string;
+  steps: NegotiationStep[];
+  dialogue: NegotiationDialogueTurn[];
+  summary: string;
+  agreedTerms?: {
+    topic: string;
+    price?: string;
+    schedule?: string;
+    locationProtocol: string;
+    safetyConfirmed: boolean;
+  };
 }

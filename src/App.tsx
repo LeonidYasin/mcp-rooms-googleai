@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Listing,
   ListingCategory,
@@ -18,27 +18,8 @@ import { PrinciplesBanner } from './components/PrinciplesBanner';
 import { McpChat } from './components/McpChat';
 
 export const App: React.FC = () => {
-  // Load listings from localStorage or fallback to initial
-  const [listings, setListings] = useState<Listing[]>(() => {
-    try {
-      const saved = localStorage.getItem('mcp_rooms_listings');
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
-    }
-    return INITIAL_LISTINGS;
-  });
-
-  // Load rooms
-  const [rooms, setRooms] = useState<McpRoom[]>(() => {
-    try {
-      const saved = localStorage.getItem('mcp_rooms_rooms');
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
-    }
-    return INITIAL_ROOMS;
-  });
+  const [listings, setListings] = useState<Listing[]>(INITIAL_LISTINGS);
+  const [rooms, setRooms] = useState<McpRoom[]>(INITIAL_ROOMS);
 
   // Navigation and filters
   const [currentTab, setCurrentTab] = useState<'catalog' | 'mcp' | 'principles' | 'chat'>('catalog');
@@ -53,22 +34,33 @@ export const App: React.FC = () => {
   const [contactModalListing, setContactModalListing] = useState<Listing | null>(null);
   const [agentModalListing, setAgentModalListing] = useState<Listing | null>(null);
 
-  // Sync to localStorage
-  useEffect(() => {
+  // Fetch real listings and rooms from SQLite server database
+  const refreshDataFromDb = useCallback(async () => {
     try {
-      localStorage.setItem('mcp_rooms_listings', JSON.stringify(listings));
+      const [listingsRes, roomsRes] = await Promise.all([
+        fetch('/api/listings'),
+        fetch('/api/rooms'),
+      ]);
+      if (listingsRes.ok) {
+        const data = await listingsRes.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setListings(data);
+        }
+      }
+      if (roomsRes.ok) {
+        const rData = await roomsRes.json();
+        if (Array.isArray(rData) && rData.length > 0) {
+          setRooms(rData);
+        }
+      }
     } catch {
-      // ignore
+      // Fallback to initial state
     }
-  }, [listings]);
+  }, []);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('mcp_rooms_rooms', JSON.stringify(rooms));
-    } catch {
-      // ignore
-    }
-  }, [rooms]);
+    refreshDataFromDb();
+  }, [refreshDataFromDb]);
 
   // Filtered listings
   const filteredListings = useMemo(() => {
@@ -109,7 +101,23 @@ export const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handlePublishListing = (newListing: Listing) => {
+  const handlePublishListing = async (newListing: Listing) => {
+    try {
+      const res = await fetch('/api/listings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newListing),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setListings((prev) => [created, ...prev.filter((l) => l.id !== created.id)]);
+        setSelectedListing(created);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+    } catch {
+      // fallback
+    }
     setListings((prev) => [newListing, ...prev]);
     setSelectedListing(newListing);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -138,7 +146,21 @@ export const App: React.FC = () => {
     );
   };
 
-  const handleSendMessageToRoom = (roomId: string, message: McpMessage) => {
+  const handleSendMessageToRoom = async (roomId: string, message: McpMessage) => {
+    try {
+      await fetch(`/api/rooms/${roomId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender: message.sender,
+          role: message.role,
+          text: message.text,
+        }),
+      });
+    } catch {
+      // ignore
+    }
+
     setRooms((prev) =>
       prev.map((room) => {
         if (room.id === roomId) {
@@ -160,12 +182,11 @@ export const App: React.FC = () => {
     setAgentModalListing(listing);
   };
 
-  const handleSendSellerMessage = (
+  const handleSendSellerMessage = async (
     listingId: string,
     messageText: string,
     contactInfo: string
   ) => {
-    // Find or create room for this listing
     const existingRoom = rooms.find((r) => r.listingId === listingId);
     const targetListing = listings.find((l) => l.id === listingId);
 
@@ -179,7 +200,7 @@ export const App: React.FC = () => {
     };
 
     if (existingRoom) {
-      handleSendMessageToRoom(existingRoom.id, message);
+      await handleSendMessageToRoom(existingRoom.id, message);
     } else {
       const newRoom: McpRoom = {
         id: 'room-' + listingId,
@@ -191,9 +212,21 @@ export const App: React.FC = () => {
         messages: [message],
       };
       setRooms((prev) => [newRoom, ...prev]);
+      try {
+        await fetch(`/api/rooms/${newRoom.id}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sender: message.sender,
+            role: message.role,
+            text: message.text,
+          }),
+        });
+      } catch {
+        // ignore
+      }
     }
 
-    // Update response count on listing
     setListings((prev) =>
       prev.map((l) => (l.id === listingId ? { ...l, responses_count: l.responses_count + 1 } : l))
     );
@@ -243,10 +276,15 @@ export const App: React.FC = () => {
             listings={listings}
             rooms={rooms}
             onOpenListing={handleOpenListing}
+            onOpenRoom={() => {
+              setSelectedListing(null);
+              setCurrentTab('mcp');
+            }}
             onListingCreated={(newListing) => {
-              setListings((prev) => [newListing, ...prev]);
+              setListings((prev) => [newListing, ...prev.filter((l) => l.id !== newListing.id)]);
               handleOpenListing(newListing);
             }}
+            onRefreshData={refreshDataFromDb}
           />
         ) : currentTab === 'mcp' ? (
           <McpConsole
@@ -277,7 +315,7 @@ export const App: React.FC = () => {
                     : CATEGORY_LABELS[currentCategory]}
                 </h1>
                 <p className="text-xs md:text-sm text-[var(--muted)] mt-1">
-                  Найдено предложений и запросов: {filteredListings.length}
+                  Найдено в базе данных SQLite: {filteredListings.length}
                 </p>
               </div>
 
@@ -331,27 +369,35 @@ export const App: React.FC = () => {
                 ))}
               </div>
             ) : (
-              /* Empty results state matching prototype */
               <div className="border border-[var(--line)] rounded-2xl p-12 text-center bg-[var(--surface)] my-8">
                 <div className="text-3xl mb-3">🔍</div>
                 <h2 className="text-xl md:text-2xl font-bold text-[var(--ink)] mb-2">
                   В каталоге нет таких объявлений
                 </h2>
                 <p className="text-sm text-[var(--muted)] max-w-md mx-auto mb-6">
-                  Попробуйте изменить поисковый запрос, выбрать другую категорию или показать все доступные карточки.
+                  Попробуйте изменить поисковый запрос, выбрать другую категорию или дать поручение Агенту-Ангелу найти нужный контакт.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCurrentCategory('all');
-                    setSearchQuery('');
-                    setFilterKind('all');
-                    setSelectedLocality('all');
-                  }}
-                  className="px-5 py-2.5 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-sm font-semibold rounded-lg transition-colors cursor-pointer"
-                >
-                  Сбросить фильтры и показать все
-                </button>
+                <div className="flex justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentCategory('all');
+                      setSearchQuery('');
+                      setFilterKind('all');
+                      setSelectedLocality('all');
+                    }}
+                    className="px-5 py-2.5 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-sm font-semibold rounded-lg transition-colors cursor-pointer"
+                  >
+                    Сбросить фильтры
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentTab('chat')}
+                    className="px-5 py-2.5 border border-[var(--line)] bg-[var(--canvas)] hover:bg-[var(--raised)] text-[var(--ink)] text-sm font-semibold rounded-lg transition-colors cursor-pointer"
+                  >
+                    👼 Поручить Агенту-Ангелу
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -390,7 +436,7 @@ export const App: React.FC = () => {
       <footer className="border-t border-[var(--line)] bg-[var(--canvas)] py-6 mt-12 text-xs md:text-sm text-[var(--muted)]">
         <div className="max-w-[1120px] mx-auto px-4 md:px-8 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div>
-            <strong>MCP Rooms</strong> · Лицензия MIT · Площадка объявлений для людей и AI-агентов.
+            <strong>MCP Rooms</strong> · Серверный бэкенд на SQLite + Model Context Protocol (JSON-RPC 2.0).
           </div>
           <div className="flex gap-4">
             <button
@@ -399,9 +445,9 @@ export const App: React.FC = () => {
                 setSelectedListing(null);
                 setCurrentTab('chat');
               }}
-              className="hover:underline cursor-pointer text-[var(--blue)] font-medium"
+              className="hover:underline cursor-pointer text-[var(--blue)] font-bold"
             >
-              💬 AI Чат (MCP)
+              👼 Агент-Ангел
             </button>
             <button
               type="button"
