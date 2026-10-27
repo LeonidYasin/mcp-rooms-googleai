@@ -6,6 +6,7 @@ interface AgentModalProps {
   listing: Listing | null;
   onClose: () => void;
   onOpenConsole: () => void;
+  onOpenChat?: () => void;
 }
 
 export const AgentModal: React.FC<AgentModalProps> = ({
@@ -13,6 +14,7 @@ export const AgentModal: React.FC<AgentModalProps> = ({
   listing,
   onClose,
   onOpenConsole,
+  onOpenChat,
 }) => {
   if (!isOpen) return null;
 
@@ -69,11 +71,11 @@ export const AgentModal: React.FC<AgentModalProps> = ({
           </div>
         </div>
 
-        <div className="mt-6 flex justify-end gap-3">
+        <div className="mt-6 flex flex-wrap justify-end gap-2.5">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 border border-[var(--line)] rounded-lg text-sm text-[var(--ink)] hover:bg-[var(--surface)]"
+            className="px-3.5 py-2 border border-[var(--line)] rounded-lg text-sm text-[var(--ink)] hover:bg-[var(--surface)] cursor-pointer"
           >
             Закрыть
           </button>
@@ -83,10 +85,22 @@ export const AgentModal: React.FC<AgentModalProps> = ({
               onClose();
               onOpenConsole();
             }}
-            className="px-5 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-sm font-semibold rounded-lg transition-colors cursor-pointer"
+            className="px-3.5 py-2 border border-[var(--line)] bg-[var(--surface)] hover:bg-[var(--raised)] text-[var(--ink)] text-sm font-semibold rounded-lg transition-colors cursor-pointer"
           >
-            Открыть MCP Консоль →
+            MCP Консоль
           </button>
+          {onOpenChat && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenChat();
+              }}
+              className="px-4 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-sm font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <span>💬 Спросить в AI Чате →</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

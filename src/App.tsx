@@ -15,6 +15,7 @@ import { ContactModal } from './components/ContactModal';
 import { AgentModal } from './components/AgentModal';
 import { McpConsole } from './components/McpConsole';
 import { PrinciplesBanner } from './components/PrinciplesBanner';
+import { McpChat } from './components/McpChat';
 
 export const App: React.FC = () => {
   // Load listings from localStorage or fallback to initial
@@ -40,7 +41,7 @@ export const App: React.FC = () => {
   });
 
   // Navigation and filters
-  const [currentTab, setCurrentTab] = useState<'catalog' | 'mcp' | 'principles'>('catalog');
+  const [currentTab, setCurrentTab] = useState<'catalog' | 'mcp' | 'principles' | 'chat'>('catalog');
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
   const [currentCategory, setCurrentCategory] = useState<ListingCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -237,7 +238,17 @@ export const App: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1">
-        {currentTab === 'mcp' ? (
+        {currentTab === 'chat' ? (
+          <McpChat
+            listings={listings}
+            rooms={rooms}
+            onOpenListing={handleOpenListing}
+            onListingCreated={(newListing) => {
+              setListings((prev) => [newListing, ...prev]);
+              handleOpenListing(newListing);
+            }}
+          />
+        ) : currentTab === 'mcp' ? (
           <McpConsole
             listings={listings}
             rooms={rooms}
@@ -369,6 +380,10 @@ export const App: React.FC = () => {
           setSelectedListing(null);
           setCurrentTab('mcp');
         }}
+        onOpenChat={() => {
+          setSelectedListing(null);
+          setCurrentTab('chat');
+        }}
       />
 
       {/* Footer */}
@@ -378,6 +393,16 @@ export const App: React.FC = () => {
             <strong>MCP Rooms</strong> · Лицензия MIT · Площадка объявлений для людей и AI-агентов.
           </div>
           <div className="flex gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedListing(null);
+                setCurrentTab('chat');
+              }}
+              className="hover:underline cursor-pointer text-[var(--blue)] font-medium"
+            >
+              💬 AI Чат (MCP)
+            </button>
             <button
               type="button"
               onClick={() => {

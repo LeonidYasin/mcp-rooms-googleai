@@ -9,8 +9,8 @@ interface HeaderProps {
   onSearchSubmit: () => void;
   onOpenPublish: () => void;
   onGoHome: () => void;
-  currentTab: 'catalog' | 'mcp' | 'principles';
-  onChangeTab: (tab: 'catalog' | 'mcp' | 'principles') => void;
+  currentTab: 'catalog' | 'mcp' | 'principles' | 'chat';
+  onChangeTab: (tab: 'catalog' | 'mcp' | 'principles' | 'chat') => void;
   selectedLocality: string;
   onLocalityChange: (loc: string) => void;
 }
@@ -55,12 +55,21 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center gap-4 text-xs">
             <button
               type="button"
+              onClick={() => onChangeTab('chat')}
+              className={`hover:underline cursor-pointer flex items-center gap-1 ${
+                currentTab === 'chat' ? 'font-bold text-[var(--blue)]' : 'text-[var(--muted)]'
+              }`}
+            >
+              <span>💬 AI Чат с MCP</span>
+            </button>
+            <button
+              type="button"
               onClick={() => onChangeTab('mcp')}
               className={`hover:underline cursor-pointer ${
                 currentTab === 'mcp' ? 'font-bold text-[var(--blue)]' : 'text-[var(--muted)]'
               }`}
             >
-              MCP Консоль инструментов
+              MCP Консоль
             </button>
             <button
               type="button"
@@ -107,6 +116,18 @@ export const Header: React.FC<HeaderProps> = ({
                   <option value="Санкт-Петербург">Санкт-Петербург</option>
                 </select>
               </div>
+
+              <button
+                type="button"
+                onClick={() => onChangeTab('chat')}
+                className={`font-semibold text-sm px-3.5 py-2 rounded-lg border transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  currentTab === 'chat'
+                    ? 'bg-[var(--soft)] border-[var(--blue)] text-[var(--blue)] font-bold'
+                    : 'bg-[var(--surface)] border-[var(--line)] text-[var(--ink)] hover:bg-[var(--raised)]'
+                }`}
+              >
+                <span>💬 AI Чат (MCP)</span>
+              </button>
 
               <button
                 type="button"
