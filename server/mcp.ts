@@ -6,7 +6,13 @@ import {
   getRoomByIdFromDb,
   createRoomInDb,
   addMessageToRoomInDb,
+  getProfilesFromDb,
+  getProfileByIdFromDb,
 } from './db';
+import {
+  matchListingAsymmetric,
+  getEmbeddingProviderStatus,
+} from './embeddings';
 
 // Definitions of Model Context Protocol (MCP) Tools
 export const MCP_TOOLS_MANIFEST = [
@@ -26,6 +32,41 @@ export const MCP_TOOLS_MANIFEST = [
         kind: { type: 'string', enum: ['offer', 'request', 'all'], description: 'Тип (предложение или запрос)' },
         locality: { type: 'string', description: 'Город (например: Казань, Москва)' },
       },
+    },
+  },
+  {
+    name: 'match_listings',
+    description:
+      'Асимметричный семантический матчинг (Google Embeddings с fallback): сопоставляет запрос «Хочу» (Request) одного пользователя с подходящими предложениями «Предлагаю» (Offer) другого пользователя.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Текст задачи, описания или поисковой интенции' },
+        query_kind: { type: 'string', enum: ['request', 'offer'], description: 'Тип интенции: request (ищу/хочу) или offer (предлагаю)' },
+        category: { type: 'string', description: 'Категория' },
+        locality: { type: 'string', description: 'Город' },
+        limit: { type: 'number', description: 'Максимальное количество результатов' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'get_profile',
+    description: 'Получает публичный профиль пользователя или компании (репутация, верификация, специализация).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        profile_id: { type: 'string', description: 'Идентификатор профиля (например: user:founder-alex, org:alga-tech)' },
+      },
+      required: ['profile_id'],
+    },
+  },
+  {
+    name: 'get_embedding_status',
+    description: 'Возвращает текущий статус провайдера эмбеддингов (Google Embeddings vs Fallback / Disabled).',
+    inputSchema: {
+      type: 'object',
+      properties: {},
     },
   },
   {
@@ -95,6 +136,52 @@ export const MCP_TOOLS_MANIFEST = [
 // Execute MCP Tool directly against the SQLite database
 export async function executeMcpToolCall(name: string, args: any): Promise<any> {
   switch (name) {
+    case 'match_listings': {
+      const candidates = getListingsFromDb({
+        category: args.category,
+        locality: args.locality,
+      });
+
+      const matches = await matchListingAsymmetric(args.query, candidates, {
+        queryKind: args.query_kind,
+        category: args.category,
+        locality: args.locality,
+        limit: args.limit || 5,
+      });
+
+      return {
+        query: args.query,
+        query_kind: args.query_kind || 'request',
+        embedding_status: getEmbeddingProviderStatus(),
+        matches_count: matches.length,
+        matches: matches.map((m) => ({
+          id: m.listing.id,
+          title: m.listing.content.title,
+          category: m.listing.content.category,
+          kind: m.listing.content.kind,
+          author: m.listing.author_name,
+          locality: m.listing.content.locality,
+          price_rub: m.listing.content.price_minor ? m.listing.content.price_minor / 100 : 'Договорная',
+          similarity_score: m.similarityScore,
+          similarity_percent: `${Math.round(m.similarityScore * 100)}%`,
+          match_method: m.matchMethod,
+          match_reason: m.matchReason,
+        })),
+      };
+    }
+
+    case 'get_profile': {
+      const profile = getProfileByIdFromDb(args.profile_id);
+      if (!profile) {
+        return { error: `Профиль ${args.profile_id} не найден` };
+      }
+      return { profile };
+    }
+
+    case 'get_embedding_status': {
+      return { status: getEmbeddingProviderStatus() };
+    }
+
     case 'search_listings': {
       const items = getListingsFromDb({
         category: args.category,

@@ -10,9 +10,12 @@ import {
   getRoomByIdFromDb,
   addMessageToRoomInDb,
   getNegotiationsFromDb,
+  getProfilesFromDb,
+  getProfileByIdFromDb,
 } from './server/db';
 import { handleMcpJsonRpcRequest, executeMcpToolCall, MCP_TOOLS_MANIFEST } from './server/mcp';
 import { runAutonomousNegotiation } from './server/negotiator';
+import { getEmbeddingProviderStatus, matchListingAsymmetric } from './server/embeddings';
 
 const app = express();
 const PORT = 3000;
@@ -55,6 +58,62 @@ app.post('/mcp', async (req, res) => {
 // -------------------------------------------------------------
 // 2. Real REST API Endpoints with SQLite Persistence
 // -------------------------------------------------------------
+app.get('/api/embedding/status', (_req, res) => {
+  try {
+    const status = getEmbeddingProviderStatus();
+    res.json(status);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/match', async (req, res) => {
+  try {
+    const { query, query_kind, category, locality, limit } = req.body;
+    if (!query) {
+      res.status(400).json({ error: 'Параметр query обязателен' });
+      return;
+    }
+    const candidates = getListingsFromDb({ category, locality });
+    const matches = await matchListingAsymmetric(query, candidates, {
+      queryKind: query_kind,
+      category,
+      locality,
+      limit: limit || 10,
+    });
+    res.json({
+      query,
+      query_kind: query_kind || 'request',
+      embedding_status: getEmbeddingProviderStatus(),
+      matches,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/profiles', (_req, res) => {
+  try {
+    const profiles = getProfilesFromDb();
+    res.json(profiles);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/profiles/:id', (req, res) => {
+  try {
+    const profile = getProfileByIdFromDb(req.params.id);
+    if (!profile) {
+      res.status(404).json({ error: 'Профиль не найден' });
+      return;
+    }
+    res.json(profile);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/listings', (req, res) => {
   try {
     const { category, kind, locality, query } = req.query as any;
@@ -138,12 +197,12 @@ app.get('/api/negotiations', (_req, res) => {
 
 app.post('/api/agent/negotiate', async (req, res) => {
   try {
-    const { prompt } = req.body;
+    const { prompt, targetListingId } = req.body;
     if (!prompt) {
       res.status(400).json({ error: 'Prompt is required' });
       return;
     }
-    const result = await runAutonomousNegotiation(prompt);
+    const result = await runAutonomousNegotiation(prompt, targetListingId);
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -154,7 +213,7 @@ app.post('/api/agent/negotiate', async (req, res) => {
 // 3. Angel Agent Conversational Endpoint with MCP & Autonomy
 // -------------------------------------------------------------
 app.post('/api/chat', async (req, res) => {
-  const { messages } = req.body;
+  const { messages, targetListingId } = req.body;
 
   if (!messages || !Array.isArray(messages)) {
     res.status(400).json({ error: 'Параметр messages обязателен и должен быть массивом' });
@@ -164,8 +223,9 @@ app.post('/api/chat', async (req, res) => {
   const userPrompt = messages[messages.length - 1]?.content || '';
   const promptLower = userPrompt.toLowerCase();
 
-  // If the user's intent is an autonomous task (find partner, hire specialist, search bicycle, dating, delivery)
+  // If targetListingId is passed, or user's intent is an autonomous task
   const isAutonomousTask =
+    Boolean(targetListingId) ||
     promptLower.includes('найди') ||
     promptLower.includes('найти') ||
     promptLower.includes('подбери') ||
@@ -180,15 +240,20 @@ app.post('/api/chat', async (req, res) => {
 
   if (isAutonomousTask) {
     try {
-      const negotiationResult = await runAutonomousNegotiation(userPrompt);
+      const negotiationResult = await runAutonomousNegotiation(userPrompt, targetListingId);
       res.json({
         text: negotiationResult.summary,
         negotiation: negotiationResult,
         executedTools: [
           {
-            name: 'search_listings',
-            args: { query: userPrompt },
-            result: { matched_listing: negotiationResult.targetListing?.content?.title },
+            name: 'match_listings',
+            args: { query: userPrompt, targetListingId },
+            result: {
+              matched_listing: negotiationResult.targetListing?.content?.title,
+              similarity_score: negotiationResult.similarityScore,
+              match_method: negotiationResult.matchMethod,
+              match_reason: negotiationResult.matchReason,
+            },
           },
           {
             name: 'join_room',
@@ -204,7 +269,7 @@ app.post('/api/chat', async (req, res) => {
         createdListing: negotiationResult.status === 'listing_created' ? negotiationResult.targetListing : null,
       });
       return;
-    } catch (err) {
+    } catch {
       // Fall through to general handler if error
     }
   }

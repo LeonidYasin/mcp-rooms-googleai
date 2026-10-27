@@ -275,9 +275,9 @@ export const ListingDetail: React.FC<ListingDetailProps> = ({
             <button
               type="button"
               onClick={() => onAgentDiscuss(listing)}
-              className="w-full h-11 mb-4 rounded-lg border border-[var(--line)] bg-[var(--surface)] hover:bg-[var(--raised)] text-[var(--ink)] font-semibold text-sm transition-colors cursor-pointer flex items-center justify-center gap-2"
+              className="w-full h-11 mb-4 rounded-lg border border-blue-200 bg-[var(--soft)] hover:bg-blue-100 text-[var(--blue)] font-bold text-sm transition-colors cursor-pointer flex items-center justify-center gap-2"
             >
-              <span>🤖 Обсудить через агента</span>
+              <span>👼 Поручить Агенту-Ангелу</span>
             </button>
 
             <div className="border-t border-[var(--line)] pt-4 space-y-3 text-sm">
@@ -305,17 +305,40 @@ export const ListingDetail: React.FC<ListingDetailProps> = ({
             </div>
           </section>
 
-          {/* Seller Card */}
+          {/* Seller / Profile Card */}
           <section className="border border-[var(--line)] rounded-xl p-5 bg-[var(--canvas)]">
-            <div className="text-xs text-[var(--muted)] uppercase font-semibold tracking-wider">
-              Продавец / Автор
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-[var(--muted)] uppercase font-semibold tracking-wider">
+                {listing.profile?.type === 'company' ? 'Компания / Организация' : 'Автор объявления'}
+              </span>
+              {listing.profile?.verified && (
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                  ✓ Верифицирован
+                </span>
+              )}
             </div>
+
             <h2 className="text-lg font-bold text-[var(--ink)] my-1">
-              {author_name}
+              {listing.profile?.name || author_name}
             </h2>
-            <p className="text-xs text-[var(--muted)] leading-relaxed">
-              Без выдуманных рейтингов и отметки «проверен». Здесь появятся только подтверждённые сведения об активности на площадке.
-            </p>
+
+            {listing.profile?.headline && (
+              <p className="text-xs text-[var(--blue)] font-medium mb-1.5">
+                {listing.profile.headline}
+              </p>
+            )}
+
+            {listing.profile?.bio && (
+              <p className="text-xs text-[var(--ink)]/80 mb-3 leading-relaxed">
+                {listing.profile.bio}
+              </p>
+            )}
+
+            <div className="flex items-center gap-3 text-xs text-[var(--muted)] border-t border-[var(--line)] pt-2.5">
+              <span>★ Репутация: <strong>{listing.profile?.reputation_score?.toFixed(1) || '5.0'}</strong></span>
+              <span>·</span>
+              <span>Протокол: MCP Room</span>
+            </div>
           </section>
 
           {/* Agent Information Card */}

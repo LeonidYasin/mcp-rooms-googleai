@@ -33,6 +33,7 @@ export const App: React.FC = () => {
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [contactModalListing, setContactModalListing] = useState<Listing | null>(null);
   const [agentModalListing, setAgentModalListing] = useState<Listing | null>(null);
+  const [contextListing, setContextListing] = useState<Listing | null>(null);
 
   // Fetch real listings and rooms from SQLite server database
   const refreshDataFromDb = useCallback(async () => {
@@ -178,8 +179,15 @@ export const App: React.FC = () => {
     setContactModalListing(listing);
   };
 
+  const handleDelegateToAngel = (listing: Listing) => {
+    setContextListing(listing);
+    setSelectedListing(null);
+    setCurrentTab('chat');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleAgentDiscuss = (listing: Listing) => {
-    setAgentModalListing(listing);
+    handleDelegateToAngel(listing);
   };
 
   const handleSendSellerMessage = async (
@@ -285,6 +293,8 @@ export const App: React.FC = () => {
               handleOpenListing(newListing);
             }}
             onRefreshData={refreshDataFromDb}
+            contextListing={contextListing}
+            onClearContextListing={() => setContextListing(null)}
           />
         ) : currentTab === 'mcp' ? (
           <McpConsole
@@ -365,6 +375,7 @@ export const App: React.FC = () => {
                     key={listing.id}
                     listing={listing}
                     onOpen={handleOpenListing}
+                    onDelegateToAngel={handleDelegateToAngel}
                   />
                 ))}
               </div>

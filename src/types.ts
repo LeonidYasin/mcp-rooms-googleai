@@ -59,10 +59,29 @@ export interface ListingContent {
   condition?: string;
 }
 
+export interface Profile {
+  id: string;
+  type: 'individual' | 'company';
+  name: string;
+  headline?: string;
+  bio?: string;
+  avatar_url?: string;
+  locality?: string;
+  verified: boolean;
+  reputation_score: number;
+  contact_protocols: string[];
+  created_at: number;
+}
+
 export interface Listing {
   id: string;
   owner: string;
   author_name: string;
+  profile_id?: string;
+  profile?: Profile;
+  embedding_json?: string;
+  similarity_score?: number;
+  match_method?: 'semantic_embedding' | 'lexical_fallback';
   content: ListingContent;
   status: ListingStatus;
   visibility: 'public' | 'private';
@@ -132,6 +151,9 @@ export interface NegotiationResult {
   steps: NegotiationStep[];
   dialogue: NegotiationDialogueTurn[];
   summary: string;
+  similarityScore?: number;
+  matchMethod?: 'semantic_embedding' | 'lexical_fallback';
+  matchReason?: string;
   agreedTerms?: {
     topic: string;
     price?: string;
@@ -140,3 +162,11 @@ export interface NegotiationResult {
     safetyConfirmed: boolean;
   };
 }
+
+export interface EmbeddingProviderStatus {
+  provider: 'google' | 'disabled' | 'fallback';
+  model: string;
+  isAvailable: boolean;
+  reason?: string;
+}
+

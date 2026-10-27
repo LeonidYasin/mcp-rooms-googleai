@@ -7,6 +7,10 @@ import {
   saveNegotiationInDb,
   getRoomsFromDb,
 } from './db';
+import {
+  matchListingAsymmetric,
+  getEmbeddingProviderStatus,
+} from './embeddings';
 
 export interface NegotiationStep {
   type: 'search' | 'room_created' | 'agent_round' | 'agreement_recorded';
@@ -34,6 +38,9 @@ export interface NegotiationResult {
   steps: NegotiationStep[];
   dialogue: NegotiationDialogueTurn[];
   summary: string;
+  similarityScore?: number;
+  matchMethod?: 'semantic_embedding' | 'lexical_fallback';
+  matchReason?: string;
   agreedTerms?: {
     topic: string;
     price?: string;
@@ -43,15 +50,25 @@ export interface NegotiationResult {
   };
 }
 
-export async function runAutonomousNegotiation(userPrompt: string): Promise<NegotiationResult> {
+export async function runAutonomousNegotiation(
+  userPrompt: string,
+  targetListingId?: string
+): Promise<NegotiationResult> {
   const promptLower = userPrompt.toLowerCase();
   const now = Date.now();
   const steps: NegotiationStep[] = [];
   const dialogue: NegotiationDialogueTurn[] = [];
 
+  // Determine user intent kind (request vs offer)
+  const isOfferIntent =
+    promptLower.includes('предлагаю') ||
+    promptLower.includes('продаю') ||
+    promptLower.includes('могу сделать') ||
+    promptLower.includes('оказываю услуги');
+  const queryKind: 'request' | 'offer' = isOfferIntent ? 'offer' : 'request';
+
   // Determine category and keywords from user task
   let category = 'all';
-  let searchKind = 'offer';
   let searchLocality = '';
 
   if (promptLower.includes('бизнес') || promptLower.includes('партнер') || promptLower.includes('кофаундер') || promptLower.includes('стартап') || promptLower.includes('b2b')) {
@@ -73,29 +90,63 @@ export async function runAutonomousNegotiation(userPrompt: string): Promise<Nego
   if (promptLower.includes('казан')) searchLocality = 'Казань';
   else if (promptLower.includes('москв')) searchLocality = 'Москва';
 
-  // Step 1: Autonomous Search via MCP
-  steps.push({
-    type: 'search',
-    title: 'MCP search_listings: Поиск в базе данных SQLite',
-    detail: `Категория: ${category}, город: ${searchLocality || 'все'}, запрос: «${userPrompt.substring(0, 50)}»`,
-    status: 'completed',
-    timestamp: now,
-  });
+  let bestMatch: any = null;
+  let matchScore = 0.95;
+  let matchMethod: 'semantic_embedding' | 'lexical_fallback' = 'lexical_fallback';
+  let matchReason = '';
 
-  // Query SQLite
-  let candidates = getListingsFromDb({
-    category: category !== 'all' ? category : undefined,
-    locality: searchLocality || undefined,
-  });
+  if (targetListingId) {
+    // Explicit target listing passed from card context
+    bestMatch = getListingByIdFromDb(targetListingId);
+    matchScore = 1.0;
+    matchReason = `Прямой контекст карточки объявления #${targetListingId}`;
+    steps.push({
+      type: 'search',
+      title: `MCP context: Зафиксирован целевой объект переговоров`,
+      detail: `Объявление: «${bestMatch?.content?.title || targetListingId}» (автор: ${bestMatch?.author_name || 'автор'})`,
+      status: 'completed',
+      timestamp: now,
+    });
+  } else {
+    // Query candidate listings from SQLite
+    let candidates = getListingsFromDb({
+      category: category !== 'all' ? category : undefined,
+      locality: searchLocality || undefined,
+    });
 
-  if (candidates.length === 0) {
-    candidates = getListingsFromDb({ category: category !== 'all' ? category : undefined });
+    if (candidates.length === 0) {
+      candidates = getListingsFromDb({ category: category !== 'all' ? category : undefined });
+    }
+    if (candidates.length === 0) {
+      candidates = getListingsFromDb({});
+    }
+
+    // Run Asymmetric Semantic Matching (Google Embeddings with fallback)
+    const matchResults = await matchListingAsymmetric(userPrompt, candidates, {
+      queryKind,
+      category: category !== 'all' ? category : undefined,
+      locality: searchLocality || undefined,
+      limit: 3,
+    });
+
+    if (matchResults.length > 0) {
+      const top = matchResults[0];
+      bestMatch = top.listing;
+      matchScore = top.similarityScore;
+      matchMethod = top.matchMethod;
+      matchReason = top.matchReason;
+
+      steps.push({
+        type: 'search',
+        title: `MCP match_listings (${matchMethod === 'semantic_embedding' ? 'Google Embeddings' : 'Семантический индекс fallback'}): ${Math.round(matchScore * 100)}% совпадение`,
+        detail: `${matchReason} · Запрос: «${userPrompt.substring(0, 50)}»`,
+        status: 'completed',
+        timestamp: now,
+      });
+    } else {
+      bestMatch = candidates[0];
+    }
   }
-  if (candidates.length === 0) {
-    candidates = getListingsFromDb({});
-  }
-
-  const bestMatch = candidates[0];
 
   // Case A: Found existing listing -> Autonomous Multi-Agent Negotiation in Shared Room
   if (bestMatch) {
@@ -302,6 +353,9 @@ export async function runAutonomousNegotiation(userPrompt: string): Promise<Nego
       steps,
       dialogue,
       summary,
+      similarityScore: matchScore,
+      matchMethod,
+      matchReason,
       agreedTerms: agreedTermsObj,
     };
   }

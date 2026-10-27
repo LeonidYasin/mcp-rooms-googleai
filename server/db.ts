@@ -67,6 +67,32 @@ export function initDatabase() {
       FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS profiles (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL, -- 'individual' or 'company'
+      name TEXT NOT NULL,
+      headline TEXT,
+      bio TEXT,
+      avatar_url TEXT,
+      locality TEXT,
+      verified INTEGER NOT NULL DEFAULT 0,
+      reputation_score REAL NOT NULL DEFAULT 5.0,
+      contact_protocols TEXT NOT NULL DEFAULT '["mcp_room"]',
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS listing_embeddings (
+      id TEXT PRIMARY KEY,
+      listing_id TEXT NOT NULL,
+      kind TEXT NOT NULL, -- 'request' or 'offer'
+      provider TEXT NOT NULL, -- 'google' or 'fallback'
+      model TEXT NOT NULL,
+      dimensions INTEGER NOT NULL,
+      vector_json TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY(listing_id) REFERENCES listings(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS negotiations (
       id TEXT PRIMARY KEY,
       room_id TEXT NOT NULL,
@@ -83,10 +109,151 @@ export function initDatabase() {
     );
   `);
 
+  // Safe migration for existing listings table
+  try {
+    const listingColumns = db.prepare(`PRAGMA table_info(listings)`).all() as any[];
+    const colNames = listingColumns.map((c) => c.name);
+    if (!colNames.includes('profile_id')) {
+      db.exec(`ALTER TABLE listings ADD COLUMN profile_id TEXT;`);
+    }
+    if (!colNames.includes('embedding_json')) {
+      db.exec(`ALTER TABLE listings ADD COLUMN embedding_json TEXT;`);
+    }
+  } catch {
+    // Column already exists or table freshly initialized
+  }
+
+  seedProfilesIfEmpty();
+
   // Seed default data if database is empty
   const count = db.prepare('SELECT COUNT(*) as cnt FROM listings').get() as { cnt: number };
   if (count.cnt === 0) {
     seedInitialData();
+  }
+}
+
+function seedProfilesIfEmpty() {
+  const profileCount = db.prepare('SELECT COUNT(*) as cnt FROM profiles').get() as { cnt: number };
+  if (profileCount.cnt === 0) {
+    const now = Date.now();
+    const profiles = [
+      {
+        id: 'user:founder-alex',
+        type: 'individual',
+        name: 'Алексей Мельников',
+        headline: 'AI Systems Architect & Фаундер',
+        bio: '10 лет в IT, разрабатываю LLM-агентов и распределённые протоколы. Ищу коммерческого кофаундера для B2B платформы.',
+        avatar_url: '',
+        locality: 'Казань',
+        verified: 1,
+        reputation_score: 4.9,
+        contact_protocols: JSON.stringify(['mcp_room', 'telegram']),
+        created_at: now - 3600000 * 50,
+      },
+      {
+        id: 'user:hr-lead-tech',
+        type: 'company',
+        name: 'TechFin Solutions',
+        headline: 'Финтех-платформа нового поколения',
+        bio: 'Создаем высоконагруженные финансовые решения. Стек: Node.js, TypeScript, Go, distributed microservices.',
+        avatar_url: '',
+        locality: 'Москва',
+        verified: 1,
+        reputation_score: 5.0,
+        contact_protocols: JSON.stringify(['mcp_room']),
+        created_at: now - 3600000 * 120,
+      },
+      {
+        id: 'user:master-marat',
+        type: 'individual',
+        name: 'Марат Хабибуллин',
+        headline: 'Мастер сантехники и комплексного ремонта',
+        bio: 'Опыт более 12 лет. Профессиональный инструмент, договор, официальная гарантия 3 года. Бесплатный замер по Казани.',
+        avatar_url: '',
+        locality: 'Казань',
+        verified: 1,
+        reputation_score: 4.95,
+        contact_protocols: JSON.stringify(['mcp_room']),
+        created_at: now - 3600000 * 90,
+      },
+      {
+        id: 'user:daria-nature',
+        type: 'individual',
+        name: 'Дарья Лебедева',
+        headline: 'Организатор походов и веловыездов',
+        bio: 'Люблю горы, Волгу и настольные игры. Безопасность и открытое общение. Организую велопрогулки и треккинг.',
+        avatar_url: '',
+        locality: 'Казань',
+        verified: 1,
+        reputation_score: 4.9,
+        contact_protocols: JSON.stringify(['mcp_room']),
+        created_at: now - 3600000 * 60,
+      },
+      {
+        id: 'user:kazan-cyclist',
+        type: 'individual',
+        name: 'Ильдар Сафиуллин',
+        headline: 'Велоэнтузиаст и триатлет',
+        bio: 'Бережно отношусь к технике. Велосипед обслуживался перед каждым сезоном.',
+        avatar_url: '',
+        locality: 'Казань',
+        verified: 1,
+        reputation_score: 4.85,
+        contact_protocols: JSON.stringify(['mcp_room']),
+        created_at: now - 3600000 * 40,
+      },
+      {
+        id: 'user:timur-driver',
+        type: 'individual',
+        name: 'Тимур Валиев',
+        headline: 'Водитель с комфортным кроссовером',
+        bio: 'Стаж вождения 9 лет, аккуратная езда, чистый салон, кондиционер.',
+        avatar_url: '',
+        locality: 'Казань',
+        verified: 1,
+        reputation_score: 4.9,
+        contact_protocols: JSON.stringify(['mcp_room']),
+        created_at: now - 3600000 * 25,
+      },
+      {
+        id: 'user:courier-express',
+        type: 'company',
+        name: 'Экспресс Доставка Татарстан',
+        headline: 'Срочная курьерская служба',
+        bio: 'Быстрая доставка документов, посылок и малогабаритных грузов по Казани за 60-90 минут.',
+        avatar_url: '',
+        locality: 'Казань',
+        verified: 1,
+        reputation_score: 4.75,
+        contact_protocols: JSON.stringify(['mcp_room']),
+        created_at: now - 3600000 * 15,
+      },
+      {
+        id: 'user:buyer-77',
+        type: 'individual',
+        name: 'Константин Смирнов',
+        headline: 'Пользователь MCP ROOMS',
+        bio: 'Поиск товаров, услуг и партнерств через персонального Агента-Ангела.',
+        avatar_url: '',
+        locality: 'Казань',
+        verified: 0,
+        reputation_score: 5.0,
+        contact_protocols: JSON.stringify(['mcp_room']),
+        created_at: now - 3600000 * 10,
+      },
+    ];
+
+    const insertP = db.prepare(`
+      INSERT INTO profiles (
+        id, type, name, headline, bio, avatar_url, locality, verified, reputation_score, contact_protocols, created_at
+      ) VALUES (
+        @id, @type, @name, @headline, @bio, @avatar_url, @locality, @verified, @reputation_score, @contact_protocols, @created_at
+      )
+    `);
+
+    for (const p of profiles) {
+      insertP.run(p);
+    }
   }
 }
 
@@ -595,6 +762,139 @@ export function getNegotiationsFromDb() {
   }));
 }
 
+export function getProfilesFromDb() {
+  const rows = db.prepare('SELECT * FROM profiles ORDER BY reputation_score DESC, created_at DESC').all() as any[];
+  return rows.map((r) => ({
+    id: r.id,
+    type: r.type,
+    name: r.name,
+    headline: r.headline || undefined,
+    bio: r.bio || undefined,
+    avatar_url: r.avatar_url || undefined,
+    locality: r.locality || undefined,
+    verified: Boolean(r.verified),
+    reputation_score: r.reputation_score,
+    contact_protocols: JSON.parse(r.contact_protocols || '["mcp_room"]'),
+    created_at: r.created_at,
+  }));
+}
+
+export function getProfileByIdFromDb(id: string) {
+  if (!id) return null;
+  const r = db.prepare('SELECT * FROM profiles WHERE id = ?').get(id) as any;
+  if (!r) return null;
+  return {
+    id: r.id,
+    type: r.type,
+    name: r.name,
+    headline: r.headline || undefined,
+    bio: r.bio || undefined,
+    avatar_url: r.avatar_url || undefined,
+    locality: r.locality || undefined,
+    verified: Boolean(r.verified),
+    reputation_score: r.reputation_score,
+    contact_protocols: JSON.parse(r.contact_protocols || '["mcp_room"]'),
+    created_at: r.created_at,
+  };
+}
+
+export function createProfileInDb(profile: {
+  id: string;
+  type: 'individual' | 'company';
+  name: string;
+  headline?: string;
+  bio?: string;
+  avatar_url?: string;
+  locality?: string;
+  verified?: boolean;
+  reputation_score?: number;
+  contact_protocols?: string[];
+}) {
+  const now = Date.now();
+  db.prepare(`
+    INSERT OR REPLACE INTO profiles (
+      id, type, name, headline, bio, avatar_url, locality, verified, reputation_score, contact_protocols, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    profile.id,
+    profile.type,
+    profile.name,
+    profile.headline || null,
+    profile.bio || null,
+    profile.avatar_url || null,
+    profile.locality || null,
+    profile.verified ? 1 : 0,
+    profile.reputation_score ?? 5.0,
+    JSON.stringify(profile.contact_protocols || ['mcp_room']),
+    now
+  );
+  return getProfileByIdFromDb(profile.id);
+}
+
+export function saveListingEmbeddingInDb(data: {
+  id: string;
+  listing_id: string;
+  kind: 'request' | 'offer';
+  provider: string;
+  model: string;
+  dimensions: number;
+  vector: number[];
+}) {
+  const now = Date.now();
+  const vectorJson = JSON.stringify(data.vector);
+
+  db.prepare(`
+    INSERT OR REPLACE INTO listing_embeddings (
+      id, listing_id, kind, provider, model, dimensions, vector_json, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    data.id,
+    data.listing_id,
+    data.kind,
+    data.provider,
+    data.model,
+    data.dimensions,
+    vectorJson,
+    now
+  );
+
+  // Also cache directly in listings table for quick retrieval
+  try {
+    db.prepare('UPDATE listings SET embedding_json = ? WHERE id = ?').run(vectorJson, data.listing_id);
+  } catch {
+    // ignore
+  }
+}
+
+export function getListingEmbeddingFromDb(listingId: string) {
+  const row = db.prepare('SELECT * FROM listing_embeddings WHERE listing_id = ?').get(listingId) as any;
+  if (!row) return null;
+  return {
+    id: row.id,
+    listing_id: row.listing_id,
+    kind: row.kind,
+    provider: row.provider,
+    model: row.model,
+    dimensions: row.dimensions,
+    vector: JSON.parse(row.vector_json || '[]'),
+    updated_at: row.updated_at,
+  };
+}
+
+export function getAllListingEmbeddingsFromDb() {
+  const rows = db.prepare('SELECT * FROM listing_embeddings').all() as any[];
+  return rows.map((r) => ({
+    id: r.id,
+    listing_id: r.listing_id,
+    kind: r.kind,
+    provider: r.provider,
+    model: r.model,
+    dimensions: r.dimensions,
+    vector: JSON.parse(r.vector_json || '[]'),
+    updated_at: r.updated_at,
+  }));
+}
+
 function formatListingRow(row: any) {
   let modes: string[] = [];
   try {
@@ -610,10 +910,15 @@ function formatListingRow(row: any) {
     photos = [];
   }
 
+  const profile = row.profile_id ? getProfileByIdFromDb(row.profile_id) : getProfileByIdFromDb(row.owner);
+
   return {
     id: row.id,
     owner: row.owner,
     author_name: row.author_name,
+    profile_id: row.profile_id || undefined,
+    profile: profile || undefined,
+    embedding_json: row.embedding_json || undefined,
     content: {
       title: row.title,
       description: row.description,

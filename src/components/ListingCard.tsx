@@ -4,6 +4,7 @@ import { Listing, CATEGORY_LABELS, MODE_LABELS } from '../types';
 interface ListingCardProps {
   listing: Listing;
   onOpen: (listing: Listing) => void;
+  onDelegateToAngel?: (listing: Listing) => void;
 }
 
 export const formatPrice = (priceMinor: number | null, currency: string = 'RUB'): string => {
@@ -16,8 +17,8 @@ export const formatPrice = (priceMinor: number | null, currency: string = 'RUB')
   return `${formatted} ${currencySymbol}`;
 };
 
-export const ListingCard: React.FC<ListingCardProps> = ({ listing, onOpen }) => {
-  const { content, photos, responses_count } = listing;
+export const ListingCard: React.FC<ListingCardProps> = ({ listing, onOpen, onDelegateToAngel }) => {
+  const { content, photos, responses_count, author_name, profile, similarity_score } = listing;
 
   const modesText = content.modes.map((m) => MODE_LABELS[m]).join(' или ');
   const locationText = [content.locality, modesText].filter(Boolean).join(' · ');
@@ -34,6 +35,11 @@ export const ListingCard: React.FC<ListingCardProps> = ({ listing, onOpen }) => 
               → {content.subcategory}
             </span>
           )}
+          {similarity_score !== undefined && (
+            <span className="text-xs font-semibold text-emerald-800 bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-300 px-2 py-0.5 rounded">
+              {Math.round(similarity_score * 100)}% совпадение
+            </span>
+          )}
           {responses_count > 0 && (
             <span className="text-xs text-[var(--blue)] bg-[var(--soft)] px-2 py-0.5 rounded font-medium">
               Откликов: {responses_count}
@@ -45,24 +51,52 @@ export const ListingCard: React.FC<ListingCardProps> = ({ listing, onOpen }) => 
           {content.title}
         </h2>
 
-        <p className="text-sm text-[var(--muted)] mb-3">
-          {locationText || 'Локация не указана'}
-        </p>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)] mb-2">
+          <span className="font-medium text-[var(--ink)]">{author_name}</span>
+          {profile?.verified && (
+            <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded font-semibold text-[10px]">
+              ✓ Верифицирован
+            </span>
+          )}
+          {profile?.type === 'company' && (
+            <span className="bg-[var(--soft)] text-[var(--blue)] px-1.5 py-0.2 rounded text-[10px] font-medium">
+              Компания
+            </span>
+          )}
+          {profile?.reputation_score && (
+            <span>★ {profile.reputation_score.toFixed(1)}</span>
+          )}
+          <span>·</span>
+          <span>{locationText || 'Локация не указана'}</span>
+        </div>
 
         <p className="text-sm text-[var(--muted)] line-clamp-2 mb-4 leading-relaxed">
           {content.description}
         </p>
 
-        <button
-          type="button"
-          onClick={() => onOpen(listing)}
-          className="h-10 px-4 rounded-lg border border-[var(--line)] bg-[var(--surface)] hover:bg-[var(--raised)] text-[var(--ink)] font-semibold text-sm transition-colors cursor-pointer inline-flex items-center gap-1.5"
-        >
-          <span>Открыть карточку</span>
-          <svg className="w-4 h-4 text-[var(--muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onOpen(listing)}
+            className="h-9 px-4 rounded-lg border border-[var(--line)] bg-[var(--surface)] hover:bg-[var(--raised)] text-[var(--ink)] font-semibold text-sm transition-colors cursor-pointer inline-flex items-center gap-1.5"
+          >
+            <span>Карточка</span>
+            <svg className="w-3.5 h-3.5 text-[var(--muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+
+          {onDelegateToAngel && (
+            <button
+              type="button"
+              onClick={() => onDelegateToAngel(listing)}
+              className="h-9 px-3.5 rounded-lg border border-blue-200 bg-[var(--soft)] hover:bg-blue-100 text-[var(--blue)] font-semibold text-sm transition-colors cursor-pointer inline-flex items-center gap-1.5"
+              title="Поручить персональному Агенту-Ангелу провести автономные переговоры"
+            >
+              <span>👼 Поручить Ангелу</span>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="md:text-right shrink-0 w-full md:w-auto pt-3 md:pt-0 border-t md:border-t-0 border-[var(--line)] flex md:flex-col justify-between items-center md:items-end">

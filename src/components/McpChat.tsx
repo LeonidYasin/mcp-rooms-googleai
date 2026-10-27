@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Listing, McpRoom, NegotiationResult } from '../types';
+import { Listing, McpRoom, NegotiationResult, EmbeddingProviderStatus } from '../types';
 
 export interface ChatMessage {
   id: string;
@@ -22,6 +22,8 @@ interface McpChatProps {
   onOpenRoom?: (roomId: string) => void;
   onListingCreated: (listing: Listing) => void;
   onRefreshData?: () => void;
+  contextListing?: Listing | null;
+  onClearContextListing?: () => void;
 }
 
 export const McpChat: React.FC<McpChatProps> = ({
@@ -31,13 +33,15 @@ export const McpChat: React.FC<McpChatProps> = ({
   onOpenRoom,
   onListingCreated,
   onRefreshData,
+  contextListing,
+  onClearContextListing,
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome-angel',
       role: 'assistant',
       content:
-        'Здравствуйте! Я ваш персональный **Агент-Ангел** площадки MCP Rooms.\n\nЯ умею автономно решать ваши задачи через реальные MCP-инструменты и базу данных SQLite:\n\n• **Бизнес:** найду бизнес-партнёра, кофаундера или инвестора;\n• **Услуги:** найду проверенного мастера и согласую выезд и смету;\n• **Работа:** подберу вакансию или специалистов по стеку;\n• **Знакомства:** найду компанию для хобби, спорта и поездок;\n• **Товары:** договорюсь о покупке, проверке и самовывозе.\n\nДайте мне задачу — я найду совпадения, войду в комнату переговоров и проведу раунд согласования с агентом автора!',
+        'Здравствуйте! Я ваш персональный **Агент-Ангел** площадки MCP Rooms.\n\nЯ умею автономно решать ваши задачи через реальные MCP-инструменты и базу данных SQLite:\n\n• **Бизнес:** найду бизнес-партнёра, кофаундера или инвестора;\n• **Услуги:** найду проверенного мастера и согласую выезд и смету;\n• **Работа:** подберу вакансию или специалистов по стеку;\n• **Знакомства:** найду компанию для хобби, спорта и поездок;\n• **Товары:** договорюсь о покупке, проверке и самовывозе.\n\nДайте мне задачу — я найду совпадения через асимметричный семантический матчинг, войду в комнату переговоров и проведу раунд согласования с агентом автора!',
       timestamp: Date.now(),
     },
   ]);
@@ -45,6 +49,7 @@ export const McpChat: React.FC<McpChatProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [activeTabPrompt, setActiveTabPrompt] = useState<'all' | 'biz' | 'services' | 'jobs' | 'dating'>('all');
   const [expandedDialogueId, setExpandedDialogueId] = useState<string | null>(null);
+  const [embeddingStatus, setEmbeddingStatus] = useState<EmbeddingProviderStatus | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -55,6 +60,16 @@ export const McpChat: React.FC<McpChatProps> = ({
   useEffect(() => {
     scrollToBottom();
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    // Fetch live embedding provider status from backend
+    fetch('/api/embedding/status')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setEmbeddingStatus(data);
+      })
+      .catch(() => {});
+  }, []);
 
   const handleSendMessage = async (textToSend?: string) => {
     const text = (textToSend || input).trim();
@@ -76,6 +91,7 @@ export const McpChat: React.FC<McpChatProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          targetListingId: contextListing?.id || undefined,
           messages: [...messages, userMessage].map((m) => ({
             role: m.role,
             content: m.content,
@@ -159,16 +175,25 @@ export const McpChat: React.FC<McpChatProps> = ({
             👼
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-base md:text-lg font-black text-[var(--ink)] tracking-tight">
                 Агент-Ангел · Персональный ИИ-ассистент
               </h1>
               <span className="text-[11px] bg-[var(--greenbg)] text-[var(--green)] font-bold px-2.5 py-0.5 rounded-full">
                 SQLite БД + MCP
               </span>
+              {embeddingStatus?.isAvailable ? (
+                <span className="text-[11px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 font-semibold px-2 py-0.5 rounded-md" title={embeddingStatus.reason}>
+                  ✨ Google Embeddings API
+                </span>
+              ) : (
+                <span className="text-[11px] bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 font-semibold px-2 py-0.5 rounded-md" title={embeddingStatus?.reason || 'Fallback'}>
+                  ⚡ Лексический Fallback
+                </span>
+              )}
             </div>
             <p className="text-xs text-[var(--muted)]">
-              Автономный поиск, вход в комнаты переговоров и согласование условий с агентами других пользователей
+              Автономный асимметричный поиск «Хочу» ↔ «Предлагаю», вход в Shared Rooms и согласование условий
             </p>
           </div>
         </div>
@@ -196,6 +221,51 @@ export const McpChat: React.FC<McpChatProps> = ({
 
       {/* Messages Thread */}
       <div className="flex-1 border-x border-[var(--line)] bg-[var(--canvas)] p-4 md:p-6 overflow-y-auto space-y-5">
+        {/* Context Anchor Card when assigned from a specific listing */}
+        {contextListing && (
+          <div className="bg-[var(--soft)] border border-blue-200 dark:border-blue-900 rounded-xl p-3.5 mb-2 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">🎯</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-white bg-[var(--blue)] px-2 py-0.5 rounded">
+                    {contextListing.content.kind === 'offer' ? 'Предлагаю' : 'Хочу'}
+                  </span>
+                  <strong className="text-xs md:text-sm text-[var(--ink)]">{contextListing.content.title}</strong>
+                </div>
+                <div className="text-[11px] text-[var(--muted)] mt-0.5">
+                  Автор: <span className="font-semibold text-[var(--ink)]">{contextListing.author_name}</span> · {contextListing.content.locality}
+                  {contextListing.content.price_minor ? ` · ${(contextListing.content.price_minor / 100).toLocaleString('ru-RU')} ₽` : ' · Договорная'}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  handleSendMessage(
+                    `Проведи автономные переговоры с агентом автора по объявлению «${contextListing.content.title}». Наша задача: согласовать условия, график и подтвердить сделку в безопасной комнате MCP.`
+                  )
+                }
+                className="text-xs font-bold px-3 py-1.5 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white rounded-lg transition-colors cursor-pointer"
+              >
+                ⚡ Провести переговоры
+              </button>
+              {onClearContextListing && (
+                <button
+                  type="button"
+                  onClick={onClearContextListing}
+                  className="text-xs text-[var(--muted)] hover:text-[var(--ink)] border border-[var(--line)] px-2.5 py-1.5 rounded-lg bg-[var(--canvas)] cursor-pointer"
+                  title="Снять контекст объявления"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {messages.map((m) => (
           <div
             key={m.id}
@@ -235,6 +305,16 @@ export const McpChat: React.FC<McpChatProps> = ({
                       {m.negotiation.status === 'agreed' ? '✓ Договорённость достигнута' : 'Карточка создана'}
                     </span>
                   </div>
+
+                  {/* Semantic Match Reason and Score */}
+                  {m.negotiation.similarityScore !== undefined && (
+                    <div className="text-[11px] font-medium text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 p-2.5 rounded-xl border border-emerald-200 dark:border-emerald-800 flex flex-wrap items-center justify-between gap-2">
+                      <span>🎯 {m.negotiation.matchReason || 'Асимметричный семантический матчинг'}</span>
+                      <span className="font-bold text-xs bg-emerald-100 dark:bg-emerald-900 px-2 py-0.5 rounded">
+                        {Math.round(m.negotiation.similarityScore * 100)}% совпадение
+                      </span>
+                    </div>
+                  )}
 
                   {/* Steps Progress Timeline */}
                   <div className="space-y-2 bg-[var(--canvas)] p-3 rounded-xl border border-[var(--line)] text-xs">
